@@ -1,6 +1,9 @@
 project:
   type: website
   output-dir: _site
+  render:
+    - "*.qmd"
+    - "!course-agent/"
 
 website:
   title: "AI 輔助網絡統合分析教學"
