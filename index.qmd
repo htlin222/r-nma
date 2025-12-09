@@ -1,0 +1,698 @@
+---
+title: "AI 輔助網絡統合分析教學"
+subtitle: "Network Meta-analysis with R"
+author: "林協霆"
+date: 2025-12-10
+---
+
+# 課程簡介 {#intro}
+
+## 學習目標
+
+- 理解網絡統合分析的基本概念
+- 學會使用 R 進行網絡統合分析
+- 掌握結果解讀與學術寫作
+- 培養批判性思維
+
+## 課程架構
+
+```{mermaid}
+flowchart LR
+    A[概念理解] --> B[網絡幾何]
+    B --> C[NMA 執行]
+    C --> D[一致性評估]
+    D --> E[排名分析]
+    E --> F[學術報告]
+```
+
+## 模擬情境
+
+> **研究問題**：比較四種降血壓藥物（A、B、C、D）對收縮壓的相對效果
+
+- 12 篇 RCT 研究
+- 涉及多組直接與間接比較
+- 網絡統合分析
+
+# 模擬資料 {#data}
+
+## 建立資料
+
+```{r}
+#| label: create-data
+set.seed(2024)
+
+# 網絡統合分析資料：比較四種降血壓藥物
+nma_data <- data.frame(
+  study = c("Wang 2018", "Chen 2019", "Liu 2020", "Zhang 2020",
+            "Kim 2021", "Tanaka 2021", "Smith 2022", "Johnson 2023",
+            "Lee 2019", "Park 2020", "Brown 2021", "Davis 2022"),
+  treat1 = c("A", "A", "A", "B", "B", "C", "A", "B", "A", "C", "B", "C"),
+  treat2 = c("B", "C", "D", "C", "D", "D", "B", "C", "C", "D", "D", "D"),
+  n1 = c(45, 68, 52, 120, 38, 85, 63, 95, 55, 72, 48, 90),
+  n2 = c(43, 65, 50, 118, 40, 82, 60, 92, 53, 70, 50, 88),
+  mean1 = c(-12.3, -10.5, -14.2, -8.5, -9.2, -7.8, -11.8, -8.2, -10.8, -7.5, -9.0, -7.2),
+  sd1 = c(8.2, 7.5, 9.1, 7.8, 7.2, 8.5, 7.9, 8.3, 7.6, 8.1, 7.4, 8.0),
+  mean2 = c(-3.2, -4.5, -5.1, -4.8, -5.5, -4.2, -3.8, -4.5, -4.2, -3.8, -5.2, -3.5),
+  sd2 = c(7.8, 7.2, 8.5, 7.5, 6.9, 8.1, 7.5, 7.9, 7.3, 7.8, 7.0, 7.6)
+)
+```
+
+## 資料預覽
+
+```{r}
+#| label: preview-data
+knitr::kable(nma_data[, 1:5], caption = "研究基本資料")
+```
+
+## 資料結構
+
+| 欄位 | 說明 |
+|------|------|
+| `study` | 研究名稱 |
+| `treat1`, `treat2` | 比較的兩種治療 |
+| `n1`, `n2` | 各組樣本數 |
+| `mean1`, `mean2` | 各組平均值 |
+| `sd1`, `sd2` | 各組標準差 |
+
+## 網絡結構概覽
+
+```{r}
+#| label: network-overview
+# 計算每個比較的研究數
+comparisons <- table(paste(nma_data$treat1, "vs", nma_data$treat2))
+knitr::kable(as.data.frame(comparisons),
+             col.names = c("比較", "研究數"),
+             caption = "各比較的研究數")
+```
+
+# 任務一：基本概念 {#concept}
+
+## 什麼是網絡統合分析？
+
+::: {.callout-tip}
+## 比喻
+傳統統合分析像是「一對一比賽」，網絡統合分析像是「循環賽」——可以綜合所有選手的對戰結果，得出完整的排名。
+:::
+
+- 合併多種治療的直接與間接比較
+- 同時比較三個以上的治療選項
+- 產生完整的治療排名
+
+## 為什麼需要網絡統合分析？
+
+::: {.columns}
+::: {.column width="50%"}
+**傳統統合分析的限制**
+
+- 只能比較兩種治療
+- 無法整合間接證據
+- 難以產生完整排名
+:::
+
+::: {.column width="50%"}
+**網絡統合分析的優勢**
+
+- 同時比較多種治療
+- 整合直接與間接證據
+- 產生治療效果排名
+:::
+:::
+
+## 直接與間接證據
+
+```{mermaid}
+flowchart TD
+    A[藥物 A] <-->|直接比較| B[藥物 B]
+    A <-->|直接比較| C[藥物 C]
+    B <-.->|間接比較| C
+```
+
+| 證據類型 | 定義 | 來源 |
+|----------|------|------|
+| **直接證據** | 兩種治療在同一研究中直接比較 | head-to-head RCT |
+| **間接證據** | 透過共同比較組推論 | A vs B + A vs C → B vs C |
+| **混合證據** | 直接與間接證據的結合 | 網絡統合分析 |
+
+## 一致性假設
+
+::: {.callout-warning}
+## 核心假設
+網絡統合分析假設直接與間接證據一致——這是有效性的基石
+:::
+
+- 若 A 優於 B（直接），A 也優於 C（直接）
+- 則間接推論 B 與 C 的關係應與直接比較一致
+- 違反一致性會影響結果的可信度
+
+# 任務二：網絡幾何 {#network-geometry}
+
+## 載入套件
+
+```{r}
+#| label: load-packages
+library(netmeta)
+library(meta)
+library(dplyr)
+```
+
+## 計算效果量
+
+```{r}
+#| label: calc-effect
+# 計算標準化平均差
+nma_data <- nma_data %>%
+  mutate(
+    # 計算 pooled SD
+    sd_pooled = sqrt(((n1-1)*sd1^2 + (n2-1)*sd2^2) / (n1 + n2 - 2)),
+    # 計算 SMD (Hedges' g)
+    smd = (mean1 - mean2) / sd_pooled,
+    # 計算 SE
+    se = sqrt((n1 + n2)/(n1 * n2) + smd^2/(2*(n1 + n2)))
+  )
+```
+
+## 建立網絡物件
+
+```{r}
+#| label: create-network
+nma_result <- netmeta(
+  TE = smd,
+  seTE = se,
+  treat1 = treat1,
+  treat2 = treat2,
+  studlab = study,
+  data = nma_data,
+  sm = "SMD",
+  reference.group = "A",
+  common = FALSE,
+  random = TRUE
+)
+```
+
+## 網絡圖
+
+```{r}
+#| label: network-plot
+#| fig-width: 8
+#| fig-height: 8
+netgraph(nma_result,
+         plastic = FALSE,
+         thickness = "number.of.studies",
+         points = TRUE,
+         cex.points = 3,
+         col = "steelblue",
+         multiarm = TRUE,
+         number.of.studies = TRUE)
+```
+
+## 網絡幾何解讀
+
+| 元素 | 意義 |
+|------|------|
+| 節點 | 治療選項 |
+| 節點大小 | 該治療的總樣本數 |
+| 連線 | 存在直接比較 |
+| 連線粗細 | 研究數量 |
+
+## 網絡連通性
+
+```{r}
+#| label: network-connectivity
+# 檢視網絡基本資訊
+cat("治療數:", nma_result$n, "\n")
+cat("研究數:", nma_result$k, "\n")
+cat("比較數:", nma_result$m, "\n")
+```
+
+# 任務三：網絡統合分析 {#nma-analysis}
+
+## 執行網絡統合分析
+
+```{r}
+#| label: nma-summary
+summary(nma_result)
+```
+
+## League Table（聯賽表）
+
+```{r}
+#| label: league-table
+#| fig-width: 10
+#| fig-height: 8
+netleague <- netleague(nma_result,
+                       bracket = "(",
+                       digits = 2)
+print(netleague)
+```
+
+## 解讀 League Table
+
+::: {.callout-note}
+## 解讀方式
+- 行代表「比較組」，列代表「參照組」
+- 數值為 SMD (95% CI)
+- 負值表示行治療優於列治療
+:::
+
+## 森林圖：相對於參照組
+
+```{r}
+#| label: nma-forest
+#| fig-width: 10
+#| fig-height: 6
+forest(nma_result,
+       reference.group = "A",
+       sortvar = TE,
+       smlab = "SMD vs. Treatment A",
+       drop.reference.group = TRUE,
+       label.left = "Favors treatment",
+       label.right = "Favors A")
+```
+
+## 學術寫作範例
+
+::: {.callout-note}
+## Network Meta-analysis Results
+This network meta-analysis included **12 RCTs** comparing **4 treatments** (A, B, C, D). Using treatment A as the reference, the random-effects model showed that all treatments significantly reduced blood pressure compared to A. Treatment D showed the largest effect (SMD = −XX, 95% CI: −XX to −XX).
+:::
+
+# 任務四：一致性評估 {#consistency}
+
+## 為什麼要評估一致性？
+
+- 確保直接與間接證據不矛盾
+- 驗證網絡統合分析的有效性
+- 識別潛在的異質性來源
+
+## 全域一致性檢定
+
+```{r}
+#| label: global-consistency
+# Q 統計量分解
+decomp <- decomp.design(nma_result)
+print(decomp)
+```
+
+## 局部一致性檢定
+
+```{r}
+#| label: local-consistency
+# 節點分割法
+netsplit_result <- netsplit(nma_result)
+print(netsplit_result)
+```
+
+## 一致性森林圖
+
+```{r}
+#| label: consistency-forest
+#| fig-width: 12
+#| fig-height: 8
+forest(netsplit_result,
+       show = "both",
+       fontsize = 8)
+```
+
+## 一致性解讀標準
+
+| 指標 | 閾值 | 解讀 |
+|------|------|------|
+| Q (設計間) | p < 0.10 | 存在設計間不一致性 |
+| 節點分割 p 值 | p < 0.10 | 該比較存在不一致性 |
+| RoR (Ratio of Ratios) | 顯著偏離 1 | 直接與間接證據不一致 |
+
+## 處理不一致性
+
+::: {.callout-caution}
+## 發現不一致性時
+1. 檢查是否有編碼錯誤
+2. 探索異質性來源（研究設計、人群差異）
+3. 考慮使用一致性模型 vs. 非一致性模型
+4. 必要時排除問題研究進行敏感度分析
+:::
+
+# 任務五：異質性評估 {#heterogeneity}
+
+## 異質性指標
+
+```{r}
+#| label: heterogeneity
+cat("Tau²:", round(nma_result$tau^2, 4), "\n")
+cat("I² (within-design):", round(nma_result$I2, 1), "%\n")
+```
+
+## 異質性來源探索
+
+```{r}
+#| label: het-sources
+# 按比較分組的異質性
+het_data <- data.frame(
+  Comparison = paste(nma_data$treat1, "vs", nma_data$treat2),
+  SMD = round(nma_data$smd, 2),
+  Study = nma_data$study
+)
+knitr::kable(het_data, caption = "各研究效果量")
+```
+
+## 討論重點
+
+- 網絡內異質性 vs. 設計間異質性
+- τ² 的臨床意義
+- 高異質性時如何解讀排名
+
+# 任務六：排名分析 {#ranking}
+
+## P-score 排名
+
+```{r}
+#| label: p-score
+# 計算 P-score
+ranking <- netrank(nma_result, small.values = "desirable")
+print(ranking)
+```
+
+## 排名圖
+
+```{r}
+#| label: rankogram
+#| fig-width: 10
+#| fig-height: 6
+# 繪製 rankogram
+plot(ranking)
+```
+
+## SUCRA 概念
+
+::: {.callout-tip}
+## Surface Under the Cumulative Ranking (SUCRA)
+- 範圍：0% 到 100%
+- 越高代表該治療排名越好的機率越高
+- P-score 是 SUCRA 的頻率學派等價物
+:::
+
+## 排名解讀標準
+
+| P-score / SUCRA | 解讀 |
+|-----------------|------|
+| > 80% | 很可能是最佳治療 |
+| 50-80% | 中等排名 |
+| < 50% | 較差排名 |
+
+## 排名的不確定性
+
+::: {.callout-warning}
+## 謹慎解讀排名
+- 排名差異可能不具統計顯著性
+- 應同時考慮信賴區間
+- 最佳治療不一定顯著優於第二名
+:::
+
+```{r}
+#| label: ranking-uncertainty
+# 建立排名摘要表
+rank_summary <- data.frame(
+  Treatment = names(ranking$Pscore.random),
+  P_score = round(ranking$Pscore.random, 3)
+)
+rank_summary <- rank_summary[order(-rank_summary$P_score), ]
+rownames(rank_summary) <- NULL
+knitr::kable(rank_summary, caption = "治療排名摘要")
+```
+
+# 任務七：次群體與統合迴歸 {#subgroup-regression}
+
+## 次群體網絡統合分析
+
+```{r}
+#| label: subgroup-nma
+# 新增年份分組
+nma_data$period <- ifelse(
+  as.numeric(gsub(".*?(\\d{4}).*", "\\1", nma_data$study)) < 2021,
+  "2018-2020",
+  "2021-2023"
+)
+
+# 分組執行 NMA
+table(nma_data$period)
+```
+
+## 網絡統合迴歸
+
+```{r}
+#| label: network-meta-reg
+# 以樣本數為協變數
+nma_data$total_n <- nma_data$n1 + nma_data$n2
+
+# 執行網絡統合迴歸（示例）
+# 注意：netmetareg 需要足夠的研究數
+cat("平均樣本數:", round(mean(nma_data$total_n), 1), "\n")
+cat("樣本數範圍:", min(nma_data$total_n), "-", max(nma_data$total_n), "\n")
+```
+
+## 注意事項
+
+::: {.callout-caution}
+## 網絡統合迴歸的限制
+- 需要更多研究數（建議每個協變數至少 10 個研究）
+- 共變數需在網絡中有足夠變異
+- 生態謬誤風險
+:::
+
+# 任務八：發表偏誤 {#publication-bias}
+
+## 比較校正漏斗圖
+
+```{r}
+#| label: funnel-nma
+#| fig-width: 10
+#| fig-height: 8
+funnel(nma_result,
+       order = c("A", "B", "C", "D"),
+       legend = TRUE)
+```
+
+## 漏斗圖解讀
+
+- 每個比較用不同符號標記
+- 對稱性評估需考慮多重比較
+- 小型研究效應可能因比較而異
+
+## 發表偏誤的特殊考量
+
+::: {.callout-warning}
+## NMA 中的發表偏誤
+- 某些比較可能較少被發表
+- 新治療 vs. 舊治療的偏見
+- 陽性結果的發表偏好
+:::
+
+## 學術寫作範例
+
+::: {.callout-note}
+## Publication Bias Assessment
+Visual inspection of the comparison-adjusted funnel plot did not reveal obvious asymmetry. However, given the limited number of studies per comparison, formal testing for publication bias was not performed.
+:::
+
+# 任務九：敏感度分析 {#sensitivity}
+
+## 排除單一研究
+
+```{r}
+#| label: loo-nma
+# 逐一排除研究
+loo_results <- list()
+for(i in 1:nrow(nma_data)) {
+  temp_data <- nma_data[-i, ]
+  temp_nma <- netmeta(
+    TE = smd,
+    seTE = se,
+    treat1 = treat1,
+    treat2 = treat2,
+    studlab = study,
+    data = temp_data,
+    sm = "SMD",
+    reference.group = "A",
+    random = TRUE,
+    common = FALSE
+  )
+  loo_results[[nma_data$study[i]]] <- temp_nma$TE.random
+}
+```
+
+## 敏感度分析結果
+
+```{r}
+#| label: sensitivity-results
+# 比較各治療相對於 A 的效果穩定性
+cat("原始分析 B vs A:", round(nma_result$TE.random["B", "A"], 3), "\n")
+cat("原始分析 C vs A:", round(nma_result$TE.random["C", "A"], 3), "\n")
+cat("原始分析 D vs A:", round(nma_result$TE.random["D", "A"], 3), "\n")
+```
+
+## 模型選擇敏感度
+
+```{r}
+#| label: model-sensitivity
+# 比較固定效應與隨機效應模型
+nma_fixed <- netmeta(
+  TE = smd,
+  seTE = se,
+  treat1 = treat1,
+  treat2 = treat2,
+  studlab = study,
+  data = nma_data,
+  sm = "SMD",
+  reference.group = "A",
+  common = TRUE,
+  random = FALSE
+)
+
+comparison_df <- data.frame(
+  Comparison = c("B vs A", "C vs A", "D vs A"),
+  Random = round(c(nma_result$TE.random["B", "A"],
+                   nma_result$TE.random["C", "A"],
+                   nma_result$TE.random["D", "A"]), 3),
+  Fixed = round(c(nma_fixed$TE.common["B", "A"],
+                  nma_fixed$TE.common["C", "A"],
+                  nma_fixed$TE.common["D", "A"]), 3)
+)
+knitr::kable(comparison_df, caption = "模型比較")
+```
+
+## 穩健性判斷
+
+- 排除任一研究後，排名是否改變？
+- 固定效應與隨機效應結果是否一致？
+- 不一致性存在時，結論是否穩健？
+
+# 任務十：學術報告 {#report}
+
+## PRISMA-NMA 報告要素
+
+::: {.columns}
+::: {.column width="50%"}
+**必要項目**
+
+1. 網絡幾何圖
+2. League table
+3. 一致性評估
+:::
+
+::: {.column width="50%"}
+**進階項目**
+
+4. 排名（SUCRA/P-score）
+5. 發表偏誤
+6. 敏感度分析
+:::
+:::
+
+## 結果摘要
+
+```{r}
+#| label: summary-table
+summary_df <- data.frame(
+  指標 = c("納入研究數", "治療選項數", "總樣本數",
+           "最佳治療", "P-score", "I²"),
+  數值 = c(nma_result$k,
+           nma_result$n,
+           sum(nma_data$n1) + sum(nma_data$n2),
+           rank_summary$Treatment[1],
+           paste0(rank_summary$P_score[1] * 100, "%"),
+           paste0(round(nma_result$I2, 1), "%"))
+)
+knitr::kable(summary_df, caption = "網絡統合分析結果摘要")
+```
+
+## 完整結果段落
+
+::: {.callout-note}
+## 結果摘要
+This network meta-analysis included **`r nma_result$k` RCTs** comparing **`r nma_result$n` treatments**. The network was well-connected with all treatments having at least one direct comparison. Using the random-effects model, Treatment `r rank_summary$Treatment[1]` showed the highest probability of being the best treatment (P-score = `r rank_summary$P_score[1]`). No significant inconsistency was detected between direct and indirect evidence. The results remained robust in sensitivity analyses.
+:::
+
+## GRADE 證據評估
+
+| 比較 | 證據品質 | 降級原因 |
+|------|----------|----------|
+| D vs A | 中等 | 間接性 |
+| C vs A | 中等 | 間接性 |
+| B vs A | 高 | - |
+
+# 檢核清單 {#checklist}
+
+## 準備階段
+
+| 項目 | 完成 |
+|------|:----:|
+| 明確定義研究問題 (PICO) | ☐ |
+| 事先註冊 (PROSPERO) | ☐ |
+| 制定納入/排除標準 | ☐ |
+| 確認網絡可連通 | ☐ |
+
+## 分析階段
+
+| 項目 | 完成 |
+|------|:----:|
+| 繪製網絡幾何圖 | ☐ |
+| 選擇適當效果量 | ☐ |
+| 執行網絡統合分析 | ☐ |
+| 評估一致性 | ☐ |
+| 評估異質性 | ☐ |
+| 計算治療排名 | ☐ |
+| 發表偏誤評估 | ☐ |
+| 敏感度分析 | ☐ |
+
+## 報告階段
+
+| 項目 | 完成 |
+|------|:----:|
+| 遵循 PRISMA-NMA 指引 | ☐ |
+| 呈現 League table | ☐ |
+| 報告一致性結果 | ☐ |
+| GRADE 評估證據品質 | ☐ |
+
+# 課程總結 {#summary}
+
+## 學習重點回顧
+
+1. **概念理解**：直接證據、間接證據、混合證據
+2. **網絡幾何**：連通性、節點、邊
+3. **一致性**：全域檢定、局部檢定
+4. **排名**：P-score、SUCRA
+5. **報告**：PRISMA-NMA 指引
+
+## NMA vs. 傳統統合分析
+
+| 面向 | 傳統統合分析 | 網絡統合分析 |
+|------|--------------|--------------|
+| 比較數 | 2 種治療 | ≥ 3 種治療 |
+| 證據類型 | 僅直接 | 直接 + 間接 |
+| 排名 | 無 | 有 |
+| 一致性 | 不適用 | 需評估 |
+| 複雜度 | 較低 | 較高 |
+
+## 應用到自己的資料
+
+資料格式要求：
+
+```csv
+study,treat1,treat2,n1,n2,mean1,sd1,mean2,sd2
+Author1 2020,A,B,50,48,10.2,3.5,8.1,3.2
+Author2 2021,B,C,75,72,11.5,4.1,9.2,3.8
+Author3 2021,A,C,60,58,10.8,3.8,8.5,3.5
+```
+
+## 延伸學習資源
+
+- [Cochrane Handbook - NMA Chapter](https://training.cochrane.org/handbook)
+- [PRISMA-NMA 2015](http://prisma-statement.org/)
+- [netmeta package](https://cran.r-project.org/web/packages/netmeta/)
+- [CINeMA](https://cinema.ispm.unibe.ch/) - 證據品質評估工具
+
+## 問答時間
+
+::: {.callout-tip}
+## 感謝參與！
+有任何問題歡迎討論
+:::

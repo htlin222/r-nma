@@ -1,0 +1,26 @@
+# Quarto
+/.quarto/
+/_site/
+/_freeze/
+*_cache/
+*_files/
+*.knit.md
+*.utf8.md
+
+# R
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+*~
+.vscode/
+.idea/

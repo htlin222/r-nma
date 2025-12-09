@@ -1,0 +1,28 @@
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: "AI 輔助網絡統合分析教學"
+  navbar:
+    left:
+      - href: index.qmd
+        text: 首頁
+      - href: slides.qmd
+        text: 簡報模式
+
+format:
+  html:
+    theme: cosmo
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    code-fold: true
+    code-tools: true
+    highlight-style: github
+
+execute:
+  echo: true
+  warning: false
+  message: false
+  freeze: auto
