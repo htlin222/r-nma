@@ -1,3 +1,7 @@
+![GitHub stars](https://img.shields.io/github/stars/htlin222/r-nma?style=flat-square)
+![Last commit](https://img.shields.io/github/last-commit/htlin222/r-nma?style=flat-square)
+![License](https://img.shields.io/github/license/htlin222/r-nma?style=flat-square)
+
 # AI 輔助網絡統合分析教學
 
 Network Meta-analysis with R - 醫學統計教學課程
